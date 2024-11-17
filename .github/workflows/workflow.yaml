@@ -1,14 +1,7 @@
 name: "CD/CD"
 
 on:
-  push:
-    branches:
-      - dev-a
-      - dev-b
-      - dev-c
-      - staging
-      - production-clone
-      - production
+  workflow_call:
 
 jobs:
   build:
