@@ -1,0 +1,47 @@
+name: "CD/CD"
+
+on:
+  push:
+    branches:
+      - dev-a
+      - dev-b
+      - dev-c
+      - staging
+      - production-clone
+      - production
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract branch name
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+      - name: Check out
+        uses: actions/checkout@v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: $${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Build image and push to GitHub Packages
+        run: |
+          docker build . -t ghcr.io/${{ env.OWNER }}/${{ env.COMPONENT_NAME }}:${{ env.BRANCH_NAME }}
+          docker push ghcr.io/${{ env.OWNER }}/${{ env.COMPONENT_NAME }}:${{ env.BRANCH_NAME }}
+
+  deploy:
+    name: Deploy to VPS
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract branch name
+        run: echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+      - name: Connect and pull
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.BRANCH_NAME == 'production' && secrets.PRODUCTION_SSH_HOST ||  secrets.DEV_SSH_HOST }}
+          username: ${{ env.BRANCH_NAME == 'production' && secrets.PRODUCTION_SSH_USER ||  secrets.DEV_SSH_USER }}
+          key: ${{ env.BRANCH_NAME == 'production' && secrets.PRODUCTION_SSH_KEY ||  secrets.DEV_SSH_KEY }}
+          script: sh ${{ secrets.DEPLOY_SCRIPT_PATH }} ${{ env.BRANCH_NAME }} ${{ env.COMPONENT_NAME }} ${{ secrets.GHCR_USER }} ${{ secrets.GHCR_TOKEN }}
